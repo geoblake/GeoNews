@@ -1,0 +1,6 @@
+{
+  "name": "Noticias Mundiales",
+  "description": "App de búsqueda y curación de noticias mundiales, de Alemania y Colombia, con alertas automáticas y gestión del historial de almacenamiento.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
