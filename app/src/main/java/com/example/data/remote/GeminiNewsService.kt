@@ -45,7 +45,9 @@ class GeminiNewsService {
               "content": "Contenido detallado y profundo de la noticia en español, explicando causas y consecuencias (2 párrafos)",
               "section": "Mundo" o "Alemania" o "Colombia",
               "source": "Nombre del medio informativo original, ej. 'Tagesschau', 'Reuters'",
-              "impactLevel": "HIGH" o "MEDIUM" o "LOW"
+              "impactLevel": "HIGH" o "MEDIUM" o "LOW",
+              "imageUrl": "URL de imagen real de alta resolución de Unsplash temática de la noticia (ej. https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80)",
+              "videoUrl": "Opcional. URL de un archivo de video MP4 público como 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' o 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' para simular cobertura (dejar nulo o vacío para la mayoría)"
             }
         """.trimIndent()
 
@@ -141,6 +143,8 @@ class GeminiNewsService {
                 val section = obj.optString("section", "Mundo")
                 val source = obj.optString("source", "Fuente de Información")
                 val impactLevel = obj.optString("impactLevel", "MEDIUM").uppercase()
+                val imageUrl = obj.optString("imageUrl", "").let { if (it.isBlank() || it == "null") null else it }
+                val videoUrl = obj.optString("videoUrl", "").let { if (it.isBlank() || it == "null") null else it }
 
                 articles.add(
                     NewsArticle(
@@ -150,7 +154,9 @@ class GeminiNewsService {
                         section = section,
                         source = source,
                         timestamp = System.currentTimeMillis() - i * 120000L, // Slightly offset so they sort cleanly
-                        impactLevel = impactLevel
+                        impactLevel = impactLevel,
+                        imageUrl = imageUrl,
+                        videoUrl = videoUrl
                     )
                 )
             }
@@ -169,11 +175,13 @@ class GeminiNewsService {
             NewsArticle(
                 title = "Cumbre Global de Energía Renovable 2026 sella Acuerdo de Cero Emisiones",
                 description = "Líderes de más de 120 países firman un acuerdo histórico para triplicar la energía solar y eólica hacia el fin de la década.",
-                content = "La cumbre de París concluyó con una resolución sin precedentes donde las potencias industriales acordaron subsidios masivos para reemplazar combustibles fósiles. El acuerdo incluye el establecimiento de un fondo global de 100 mil millones de dólares para naciones en desarrollo.\n\nExpertos aseguran que esta cumbre redefine el panorama económico mundial para la próxima década, acelerando la transición energética.",
+                content = "La cumbre de París concluuyó con una resolución sin precedentes donde las potencias industriales acordaron subsidios masivos para reemplazar combustibles fósiles. El acuerdo incluye el establecimiento de un fondo global de 100 mil millones de dólares para naciones en desarrollo.\n\nExpertos aseguran que esta cumbre redefine el panorama económico mundial para la próxima década, acelerando la transición energética.",
                 section = "Mundo",
                 source = "Reuters",
                 timestamp = now,
-                impactLevel = "HIGH"
+                impactLevel = "HIGH",
+                imageUrl = "https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=800&q=80",
+                videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
             ),
             NewsArticle(
                 title = "Alianza Científica anuncia el mayor avance en fusión nuclear comercial",
@@ -182,7 +190,8 @@ class GeminiNewsService {
                 section = "Mundo",
                 source = "BBC News",
                 timestamp = now - 3600000L,
-                impactLevel = "MEDIUM"
+                impactLevel = "MEDIUM",
+                imageUrl = "https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80"
             ),
             NewsArticle(
                 title = "Mercados mundiales reaccionan con optimismo tras anuncios de estabilidad fiscal",
@@ -191,7 +200,8 @@ class GeminiNewsService {
                 section = "Mundo",
                 source = "Associated Press",
                 timestamp = now - 7200000L,
-                impactLevel = "LOW"
+                impactLevel = "LOW",
+                imageUrl = "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80"
             ),
             NewsArticle(
                 title = "Nuevos telescopios espaciales captan las primeras señales de vapor de agua en exoplanetas cercanos",
@@ -200,7 +210,8 @@ class GeminiNewsService {
                 section = "Mundo",
                 source = "Al Jazeera",
                 timestamp = now - 10800000L,
-                impactLevel = "LOW"
+                impactLevel = "LOW",
+                imageUrl = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80"
             ),
 
             // Germany
@@ -211,7 +222,8 @@ class GeminiNewsService {
                 section = "Alemania",
                 source = "Tagesschau",
                 timestamp = now - 500000L,
-                impactLevel = "HIGH"
+                impactLevel = "HIGH",
+                imageUrl = "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&w=800&q=80"
             ),
             NewsArticle(
                 title = "Transición Industrial: Fabricantes automotores alemanes logran récord de ventas eléctricas",
@@ -220,7 +232,9 @@ class GeminiNewsService {
                 section = "Alemania",
                 source = "Deutsche Welle (DW)",
                 timestamp = now - 4100000L,
-                impactLevel = "MEDIUM"
+                impactLevel = "MEDIUM",
+                imageUrl = "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&w=800&q=80",
+                videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
             ),
             NewsArticle(
                 title = "Berlín se consagra como la capital de las startups de Inteligencia Artificial en Europa",
@@ -229,7 +243,8 @@ class GeminiNewsService {
                 section = "Alemania",
                 source = "Der Spiegel",
                 timestamp = now - 8200000L,
-                impactLevel = "MEDIUM"
+                impactLevel = "MEDIUM",
+                imageUrl = "https://images.unsplash.com/photo-1677442136019-21780efad99a?auto=format&fit=crop&w=800&q=80"
             ),
             NewsArticle(
                 title = "Múnich acoge la mayor feria cultural de innovación y sostenibilidad de Baviera",
@@ -238,7 +253,8 @@ class GeminiNewsService {
                 section = "Alemania",
                 source = "Süddeutsche Zeitung",
                 timestamp = now - 12200000L,
-                impactLevel = "LOW"
+                impactLevel = "LOW",
+                imageUrl = "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80"
             ),
 
             // Colombia
@@ -249,7 +265,9 @@ class GeminiNewsService {
                 section = "Colombia",
                 source = "El Tiempo",
                 timestamp = now - 1500000L,
-                impactLevel = "HIGH"
+                impactLevel = "HIGH",
+                imageUrl = "https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=800&q=80",
+                videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
             ),
             NewsArticle(
                 title = "Bogotá y Medellín se consolidan como hubs de exportación de software y videojuegos",
@@ -258,7 +276,8 @@ class GeminiNewsService {
                 section = "Colombia",
                 source = "El Espectador",
                 timestamp = now - 5500000L,
-                impactLevel = "MEDIUM"
+                impactLevel = "MEDIUM",
+                imageUrl = "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=800&q=80"
             ),
             NewsArticle(
                 title = "Biodiversidad: Parque Nacional Natural Serranía de Chiribiquete estrena centro de investigación avanzada",
@@ -267,7 +286,8 @@ class GeminiNewsService {
                 section = "Colombia",
                 source = "Revista Semana",
                 timestamp = now - 9500000L,
-                impactLevel = "LOW"
+                impactLevel = "LOW",
+                imageUrl = "https://images.unsplash.com/photo-1516026672322-bc52d61a5555?auto=format&fit=crop&w=800&q=80"
             ),
             NewsArticle(
                 title = "El café especial colombiano bate récords en subasta internacional de Londres",
@@ -276,7 +296,8 @@ class GeminiNewsService {
                 section = "Colombia",
                 source = "Caracol Radio",
                 timestamp = now - 13500000L,
-                impactLevel = "LOW"
+                impactLevel = "LOW",
+                imageUrl = "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80"
             )
         )
     }

@@ -46,6 +46,14 @@ class NewsViewModel(
     private val _selectedArticle = MutableStateFlow<NewsArticle?>(null)
     val selectedArticle: StateFlow<NewsArticle?> = _selectedArticle.asStateFlow()
 
+    // Track dismissed high-impact alerts by their local Database IDs
+    private val _dismissedAlertIds = MutableStateFlow<Set<Int>>(emptySet())
+    val dismissedAlertIds: StateFlow<Set<Int>> = _dismissedAlertIds.asStateFlow()
+
+    fun dismissAlert(articleId: Int) {
+        _dismissedAlertIds.value = _dismissedAlertIds.value + articleId
+    }
+
     // Collect list of news in real-time, filtered by section
     val filteredNewsList: StateFlow<List<NewsArticle>> = combine(
         repository.allNews,
@@ -57,6 +65,20 @@ class NewsViewModel(
             allNews.filter { it.section.equals(section, ignoreCase = true) }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Collect list of favorite news in real-time
+    val favoriteNewsList: StateFlow<List<NewsArticle>> = repository.favoriteNews
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleFavorite(article: NewsArticle) {
+        viewModelScope.launch {
+            val newFavState = !article.isFavorite
+            repository.updateFavoriteStatus(article.id, newFavState)
+            if (_selectedArticle.value?.id == article.id) {
+                _selectedArticle.value = _selectedArticle.value?.copy(isFavorite = newFavState)
+            }
+        }
+    }
 
     // Number of articles currently stored locally
     private val _localArticleCount = MutableStateFlow(0)

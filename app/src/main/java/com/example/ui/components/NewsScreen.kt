@@ -37,6 +37,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.NewsArticle
 import com.example.ui.NewsViewModel
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import android.widget.VideoView
+import android.widget.MediaController
+import androidx.compose.ui.viewinterop.AndroidView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,6 +61,9 @@ fun NewsScreen(
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val selectedArticle by viewModel.selectedArticle.collectAsStateWithLifecycle()
     val localArticleCount by viewModel.localArticleCount.collectAsStateWithLifecycle()
+    val dismissedAlerts by viewModel.dismissedAlertIds.collectAsStateWithLifecycle()
+    val favoriteNewsList by viewModel.favoriteNewsList.collectAsStateWithLifecycle()
+    var activeTab by remember { mutableStateOf("feed") } // "feed" or "favorites"
 
     var showSettingsSheet by remember { mutableStateOf(false) }
     var hasNotificationPermission by remember {
@@ -102,7 +110,7 @@ fun NewsScreen(
                     title = {
                         Column {
                             Text(
-                                text = "GeoNews Pro",
+                                text = if (activeTab == "feed") "GeoNews Pro" else "Favoritas Guardadas",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = textPrimary,
@@ -158,6 +166,41 @@ fun NewsScreen(
                     )
                 )
                 HorizontalDivider(color = borderColor, thickness = 1.dp)
+            }
+        },
+        bottomBar = {
+            NavigationBar(
+                containerColor = bgCard,
+                tonalElevation = 8.dp
+            ) {
+                NavigationBarItem(
+                    selected = activeTab == "feed",
+                    onClick = { activeTab = "feed" },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Feed") },
+                    label = { Text("Noticias") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = bgPrimary,
+                        selectedTextColor = accentPurple,
+                        indicatorColor = accentPurple,
+                        unselectedIconColor = textSecondary,
+                        unselectedTextColor = textSecondary
+                    ),
+                    modifier = Modifier.testTag("tab_noticias")
+                )
+                NavigationBarItem(
+                    selected = activeTab == "favorites",
+                    onClick = { activeTab = "favorites" },
+                    icon = { Icon(Icons.Default.Favorite, contentDescription = "Favoritos") },
+                    label = { Text("Favoritos") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = bgPrimary,
+                        selectedTextColor = accentPurple,
+                        indicatorColor = accentPurple,
+                        unselectedIconColor = textSecondary,
+                        unselectedTextColor = textSecondary
+                    ),
+                    modifier = Modifier.testTag("tab_favoritos")
+                )
             }
         },
         containerColor = bgPrimary
@@ -263,132 +306,249 @@ fun NewsScreen(
                 }
             }
 
-            // Horizontal Category Filter Layout
-            SectionSelectors(
-                selectedSection = selectedSection,
-                onSectionSelected = { viewModel.setSection(it) },
-                accentPurple = accentPurple,
-                textSecondary = textSecondary
-            )
+            if (activeTab == "feed") {
+                // Horizontal Category Filter Layout
+                SectionSelectors(
+                    selectedSection = selectedSection,
+                    onSectionSelected = { viewModel.setSection(it) },
+                    accentPurple = accentPurple,
+                    textSecondary = textSecondary
+                )
 
-            // Breaking News Alert banner at top of feed
-            val topHighImpactArticle = newsList.firstOrNull { it.impactLevel == "HIGH" }
-            if (topHighImpactArticle != null) {
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF31111D))
-                        .border(1.dp, Color(0xFF8C1D18), RoundedCornerShape(16.dp))
-                        .clickable { viewModel.selectArticle(topHighImpactArticle) }
-                        .padding(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                // Breaking News Alert banner at top of feed
+                val topHighImpactArticle = newsList.firstOrNull { it.impactLevel == "HIGH" && it.id !in dismissedAlerts }
+                if (topHighImpactArticle != null) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF31111D))
+                            .border(1.dp, Color(0xFF8C1D18), RoundedCornerShape(16.dp))
+                            .clickable { viewModel.selectArticle(topHighImpactArticle) }
+                            .padding(12.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(0xFF8C1D18), RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = "Alerta",
-                                tint = Color(0xFFF2B8B5),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "PUSH ALERT: BREAKING",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFF2B8B5),
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                text = topHighImpactArticle.title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Color(0xFF8C1D18), RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Alerta",
+                                    tint = Color(0xFFF2B8B5),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "PUSH ALERT: BREAKING",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF2B8B5),
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = topHighImpactArticle.title,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.dismissAlert(topHighImpactArticle.id) },
+                                modifier = Modifier.size(28.dp).testTag("dismiss_push_alert_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cerrar Alerta",
+                                    tint = Color(0xFFF2B8B5),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // News scroll layout
-            if (newsList.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(32.dp)
+                // News scroll layout
+                if (newsList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Sin Noticias",
-                            tint = textSecondary,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "No hay noticias disponibles",
-                            fontWeight = FontWeight.Bold,
-                            color = textPrimary,
-                            fontSize = 18.sp,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Presiona 'Actualizar' arriba para consultar los titulares usando Gemini AI.",
-                            color = textSecondary,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Sin Noticias",
+                                tint = textSecondary,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "No hay noticias disponibles",
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary,
+                                fontSize = 18.sp,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Presiona 'Actualizar' arriba para consultar los titulares usando Gemini AI.",
+                                color = textSecondary,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .testTag("news_list"),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(newsList) { article ->
+                            NewsArticleCard(
+                                article = article,
+                                bgCardColor = bgCard,
+                                accentPurple = accentPurple,
+                                bgPurpleContainer = bgPurpleContainer,
+                                textPrimary = textPrimary,
+                                textSecondary = textSecondary,
+                                onClick = { viewModel.selectArticle(article) },
+                                showFavoriteButton = true,
+                                onFavoriteToggle = { viewModel.toggleFavorite(article) }
+                            )
+                        }
+
+                        item {
+                            // Quick informative bottom disclaimer
+                            Text(
+                                text = "Fuentes analizadas: Tagesschau, DW, Spiegel, El Tiempo, El Espectador, Reuters, BBC.\nTodos los datos son gestionados de forma local.",
+                                fontSize = 11.sp,
+                                color = textSecondary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 24.dp, bottom = 12.dp)
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
+                // Header Area for Favorites Tab
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .testTag("news_list"),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(newsList) { article ->
-                        NewsArticleCard(
-                            article = article,
-                            bgCardColor = bgCard,
-                            accentPurple = accentPurple,
-                            bgPurpleContainer = bgPurpleContainer,
-                            textPrimary = textPrimary,
-                            textSecondary = textSecondary,
-                            onClick = { viewModel.selectArticle(article) }
+                    Text(
+                        text = "Favoritas Guardadas",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentPurple
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(bgPurpleContainer, RoundedCornerShape(100.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        val favCount = favoriteNewsList.size
+                        Text(
+                            text = if (favCount == 1) "1 FAVORITA" else "$favCount FAVORITAS",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accentPurple
                         )
                     }
-                    
-                    item {
-                        // Quick informative bottom disclaimer
-                        Text(
-                            text = "Fuentes analizadas: Tagesschau, DW, Spiegel, El Tiempo, El Espectador, Reuters, BBC.\nTodos los datos son gestionados de forma local.",
-                            fontSize = 11.sp,
-                            color = textSecondary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 24.dp, bottom = 12.dp)
-                        )
+                }
+
+                // Favorites scroll layout
+                if (favoriteNewsList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FavoriteBorder,
+                                contentDescription = "Sin Favoritos",
+                                tint = textSecondary,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Sin favoritas guardadas",
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary,
+                                fontSize = 18.sp,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Los artículos que guardes haciendo clic en el corazón se mostrarán aquí de forma persistente.",
+                                color = textSecondary,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .testTag("favorites_list"),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(favoriteNewsList) { article ->
+                            NewsArticleCard(
+                                article = article,
+                                bgCardColor = bgCard,
+                                accentPurple = accentPurple,
+                                bgPurpleContainer = bgPurpleContainer,
+                                textPrimary = textPrimary,
+                                textSecondary = textSecondary,
+                                onClick = { viewModel.selectArticle(article) },
+                                showFavoriteButton = true,
+                                onFavoriteToggle = { viewModel.toggleFavorite(article) }
+                            )
+                        }
+
+                        item {
+                            Text(
+                                text = "Presione el icono del corazón para eliminar elementos de esta pestaña.",
+                                fontSize = 11.sp,
+                                color = textSecondary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 24.dp, bottom = 12.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -399,6 +559,8 @@ fun NewsScreen(
     selectedArticle?.let { article ->
         NewsDetailsDialog(
             article = article,
+            isFavorite = article.isFavorite,
+            onToggleFavorite = { viewModel.toggleFavorite(article) },
             bgPrimary = bgPrimary,
             bgCard = bgCard,
             accentPurple = accentPurple,
@@ -437,10 +599,10 @@ fun SectionSelectors(
     textSecondary: Color
 ) {
     val sections = listOf(
-        "Todos" to "WORLD",
-        "Mundo" to "GERMANY",
-        "Alemania" to "COLOMBIA",
-        "Colombia" to "LOCAL"
+        "Todos" to "TODAS",
+        "Mundo" to "WORLD",
+        "Alemania" to "GERMANY",
+        "Colombia" to "COLOMBIA"
     )
 
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF1C1B1F))) {
@@ -480,6 +642,34 @@ fun SectionSelectors(
 }
 
 @Composable
+fun EmbeddedVideoPlayer(
+    videoUrl: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Color(0xFF49454F).copy(alpha = 0.5f))
+    ) {
+        AndroidView(
+            factory = { context ->
+                VideoView(context).apply {
+                    val mediaController = MediaController(context)
+                    mediaController.setAnchorView(this)
+                    setMediaController(mediaController)
+                    setVideoPath(videoUrl)
+                    setOnPreparedListener { player ->
+                        player.isLooping = true
+                        start()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
 fun NewsArticleCard(
     article: NewsArticle,
     bgCardColor: Color,
@@ -487,7 +677,9 @@ fun NewsArticleCard(
     bgPurpleContainer: Color,
     textPrimary: Color,
     textSecondary: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    showFavoriteButton: Boolean = true,
+    onFavoriteToggle: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
@@ -498,123 +690,186 @@ fun NewsArticleCard(
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, Color(0xFF49454F).copy(alpha = 0.5f))
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Card Header: Source, Section & Time
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
+                // Card Header: Source, Section & Time with inline Favoritar
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .background(bgPurpleContainer, RoundedCornerShape(100.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = article.source.uppercase(),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = accentPurple
-                        )
-                    }
-                    Text(
-                        text = article.section.uppercase(),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textSecondary
-                    )
-                }
-
-                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                Text(
-                    text = timeFormat.format(Date(article.timestamp)),
-                    fontSize = 10.sp,
-                    color = textSecondary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Body Headline title
-            Text(
-                text = article.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 20.sp
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Short summary snippet
-            Text(
-                text = article.description,
-                fontSize = 12.sp,
-                color = textSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 16.sp
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Card Footer
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (article.impactLevel == "HIGH") {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF31111D), RoundedCornerShape(100.dp))
-                            .border(1.dp, Color(0xFF8C1D18), RoundedCornerShape(100.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .background(Color(0xFFF2B8B5), CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(bgPurpleContainer, RoundedCornerShape(100.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
                             Text(
-                                text = "BLITZ / BREAKING",
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFF2B8B5)
+                                text = article.source.uppercase(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accentPurple
                             )
                         }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF1C1B1F), RoundedCornerShape(100.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
                         Text(
-                            text = "REGULAR",
-                            fontSize = 8.sp,
+                            text = article.section.uppercase(),
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = textSecondary
                         )
                     }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                        Text(
+                            text = timeFormat.format(Date(article.timestamp)),
+                            fontSize = 10.sp,
+                            color = textSecondary
+                        )
+
+                        if (showFavoriteButton && onFavoriteToggle != null) {
+                            IconButton(
+                                onClick = { onFavoriteToggle() },
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .testTag("fav_toggle_${article.id}")
+                            ) {
+                                Icon(
+                                    imageVector = if (article.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Favoritar",
+                                    tint = if (article.isFavorite) Color(0xFFF2B8B5) else textSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Body Headline title
                 Text(
-                    text = "Leer Más →",
-                    fontSize = 12.sp,
+                    text = article.title,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = accentPurple
+                    color = textPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 20.sp
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Short summary snippet
+                Text(
+                    text = article.description,
+                    fontSize = 12.sp,
+                    color = textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Card Footer
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (article.impactLevel == "HIGH") {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF31111D), RoundedCornerShape(100.dp))
+                                .border(1.dp, Color(0xFF8C1D18), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .background(Color(0xFFF2B8B5), CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "BLITZ / BREAKING",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFFF2B8B5)
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF1C1B1F), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "REGULAR",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textSecondary
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Leer Más →",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentPurple
+                    )
+                }
+            }
+
+            // Thumbnail on the right hand side
+            if (!article.imageUrl.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF100F11)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = article.imageUrl,
+                        contentDescription = "Imagen de la noticia",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+
+                    if (!article.videoUrl.isNullOrBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Noticia con Video",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -623,6 +878,8 @@ fun NewsArticleCard(
 @Composable
 fun NewsDetailsDialog(
     article: NewsArticle,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     bgPrimary: Color,
     bgCard: Color,
     accentPurple: Color,
@@ -672,15 +929,33 @@ fun NewsDetailsDialog(
                             )
                         }
 
-                        IconButton(
-                            onClick = { onClose() },
-                            modifier = Modifier.size(28.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Cerrar Diálogo",
-                                tint = textSecondary
-                            )
+                            // Heart Favorite/Bookmark Button
+                            IconButton(
+                                onClick = onToggleFavorite,
+                                modifier = Modifier.size(32.dp).testTag("dialog_favorite_btn")
+                            ) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Favoritar",
+                                    tint = if (isFavorite) Color(0xFFF2B8B5) else textSecondary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { onClose() },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cerrar Diálogo",
+                                    tint = textSecondary
+                                )
+                            }
                         }
                     }
 
@@ -723,6 +998,25 @@ fun NewsDetailsDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Dynamic News Cover Image (AsyncImage)
+                    if (!article.imageUrl.isNullOrBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1C1B1F))
+                        ) {
+                            AsyncImage(
+                                model = article.imageUrl,
+                                contentDescription = "Imagen de portada",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
                     // Alert impact tags
                     if (article.impactLevel == "HIGH") {
                         Box(
@@ -739,13 +1033,32 @@ fun NewsDetailsDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                        text = "ALERTA URGENTE: NOTICIA DE ALTO IMPACTO",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFFF2B8B5)
+                                    text = "ALERTA URGENTE: NOTICIA DE ALTO IMPACTO",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFFF2B8B5)
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    // Embedded Video Player
+                    if (!article.videoUrl.isNullOrBlank()) {
+                        Text(
+                            text = "📺 REPORTE EN VIDEO Y MULTIMEDIA",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accentPurple,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        EmbeddedVideoPlayer(
+                            videoUrl = article.videoUrl,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
                     }
 

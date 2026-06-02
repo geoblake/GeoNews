@@ -13,5 +13,8 @@ data class NewsArticle(
     val section: String, // "Mundo", "Alemania", "Colombia"
     val source: String, // e.g. BBC, Tagesschau, El Tiempo
     val timestamp: Long = System.currentTimeMillis(),
-    val impactLevel: String = "MEDIUM" // "HIGH", "MEDIUM", "LOW"
+    val impactLevel: String = "MEDIUM", // "HIGH", "MEDIUM", "LOW"
+    val imageUrl: String? = null,
+    val videoUrl: String? = null,
+    val isFavorite: Boolean = false
 ) : Serializable
