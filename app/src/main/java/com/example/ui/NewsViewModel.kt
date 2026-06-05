@@ -22,6 +22,26 @@ class NewsViewModel(
     private val sharedPrefs = application.getSharedPreferences("news_prefs", Context.MODE_PRIVATE)
     private val notificationHelper = NotificationHelper(application)
 
+    // Custom API Key configured by the user
+    private val _customApiKey = MutableStateFlow(sharedPrefs.getString("custom_api_key", null))
+    val customApiKey: StateFlow<String?> = _customApiKey.asStateFlow()
+
+    // Flag indicating if the API key is completely missing (not in SharedPreferences and not in BuildConfig)
+    val isApiKeyMissing: StateFlow<Boolean> = _customApiKey.map { customKey ->
+        val buildKey = com.example.BuildConfig.GEMINI_API_KEY
+        val hasCustomKey = !customKey.isNullOrBlank() && customKey != "MY_GEMINI_API_KEY"
+        val hasBuildKey = buildKey.isNotEmpty() && buildKey != "MY_GEMINI_API_KEY"
+        !(hasCustomKey || hasBuildKey)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun saveCustomApiKey(key: String?) {
+        val cleanKey = key?.trim()?.let { if (it.isBlank()) null else it }
+        _customApiKey.value = cleanKey
+        sharedPrefs.edit().putString("custom_api_key", cleanKey).apply()
+        // Trigger a fresh refresh of news using the new key
+        triggerNewsRefresh(isManual = true)
+    }
+
     // Current filter section ("Todos", "Mundo", "Alemania", "Colombia")
     private val _selectedSection = MutableStateFlow("Todos")
     val selectedSection: StateFlow<String> = _selectedSection.asStateFlow()
@@ -135,7 +155,8 @@ class NewsViewModel(
             _isRefreshing.value = true
             try {
                 // Fetch new articles (returns any newly fetched articles classified as HIGH impact)
-                val highImpactArticles = repository.refreshNews()
+                val keyToUse = _customApiKey.value
+                val highImpactArticles = repository.refreshNews(keyToUse)
                 
                 // Track update timestamp
                 val now = System.currentTimeMillis()

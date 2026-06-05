@@ -25,12 +25,12 @@ class NewsRepository(
     fun getNewsBySection(section: String): Flow<List<NewsArticle>> =
         newsDao.getNewsBySection(section)
 
-    suspend fun refreshNews(): List<NewsArticle> = withContext(Dispatchers.IO) {
+    suspend fun refreshNews(customApiKey: String? = null): List<NewsArticle> = withContext(Dispatchers.IO) {
         val dateFormat = SimpleDateFormat("EEEE, d 'de' MMMM 'de' yyyy", Locale("es", "ES"))
         val currentDateStr = dateFormat.format(Date())
         
         // Fetch new articles from Gemini service
-        val remoteArticles = geminiService.fetchLatestNews(currentDateStr)
+        val remoteArticles = geminiService.fetchLatestNews(currentDateStr, customApiKey)
         
         if (remoteArticles.isNotEmpty()) {
             val existingArticles = newsDao.getNewsListSync()

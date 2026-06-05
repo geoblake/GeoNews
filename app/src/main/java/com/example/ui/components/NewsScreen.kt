@@ -1,6 +1,8 @@
 package com.example.ui.components
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,8 +41,11 @@ import com.example.data.model.NewsArticle
 import com.example.ui.NewsViewModel
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
-import android.widget.VideoView
-import android.widget.MediaController
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.compose.ui.viewinterop.AndroidView
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,6 +68,8 @@ fun NewsScreen(
     val localArticleCount by viewModel.localArticleCount.collectAsStateWithLifecycle()
     val dismissedAlerts by viewModel.dismissedAlertIds.collectAsStateWithLifecycle()
     val favoriteNewsList by viewModel.favoriteNewsList.collectAsStateWithLifecycle()
+    val isApiKeyMissing by viewModel.isApiKeyMissing.collectAsStateWithLifecycle()
+    val customApiKey by viewModel.customApiKey.collectAsStateWithLifecycle()
     var activeTab by remember { mutableStateOf("feed") } // "feed" or "favorites"
 
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -252,6 +259,70 @@ fun NewsScreen(
                                 contentDescription = "Cerrar",
                                 tint = textSecondary,
                                 modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Gemini API Key Warning Banner
+            if (isApiKeyMissing) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2216)), // Warm amber/orange warning
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFD3A13B))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(Color(0xFFD3A13B), RoundedCornerShape(6.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Simulaciones Activas",
+                                    tint = Color(0xFF1C1B1F),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Text(
+                                text = "Modo de Simulaciones Activo",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF0E1B9),
+                                fontSize = 13.sp
+                            )
+                        }
+                        Text(
+                            text = "Para disfrutar de noticias reales del mundo real en tiempo real (de 2026), por favor configure una API Key válida de Gemini en la barra de Ajustes (icono de engranaje arriba a la derecha).",
+                            color = Color(0xFFCAC4D0),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                        Button(
+                            onClick = { showSettingsSheet = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD3A13B)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(28.dp).align(Alignment.End)
+                        ) {
+                            Text(
+                                "Configurar Key",
+                                color = Color(0xFF1C1B1F),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -576,6 +647,7 @@ fun NewsScreen(
         SettingsDialog(
             currentFrequency = updateFrequencyMinutes,
             totalCached = localArticleCount,
+            customApiKey = customApiKey,
             bgPrimary = bgPrimary,
             bgCard = bgCard,
             borderColor = borderColor,
@@ -583,6 +655,7 @@ fun NewsScreen(
             textPrimary = textPrimary,
             textSecondary = textSecondary,
             onFrequencyChange = { viewModel.setUpdateFrequency(it) },
+            onSaveApiKey = { viewModel.saveCustomApiKey(it) },
             onPurge = { periodDays ->
                 viewModel.deleteHistoryByPeriod(periodDays)
             },
@@ -646,26 +719,111 @@ fun EmbeddedVideoPlayer(
     videoUrl: String,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var hasError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    val exoPlayer = remember(videoUrl) {
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setAllowCrossProtocolRedirects(true)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(dataSourceFactory)
+
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build().apply {
+                addListener(object : androidx.media3.common.Player.Listener {
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        hasError = true
+                        val errorCause = error.cause?.localizedMessage ?: error.message ?: ""
+                        errorMessage = "Código: ${error.errorCodeName} (${error.errorCode})\nDetalle: $errorCause"
+                    }
+
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == androidx.media3.common.Player.STATE_READY) {
+                            hasError = false
+                        }
+                    }
+                })
+                val mediaItem = MediaItem.fromUri(videoUrl)
+                setMediaItem(mediaItem)
+                prepare()
+                playWhenReady = true
+                repeatMode = ExoPlayer.REPEAT_MODE_ONE
+            }
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, Color(0xFF49454F).copy(alpha = 0.5f))
     ) {
-        AndroidView(
-            factory = { context ->
-                VideoView(context).apply {
-                    val mediaController = MediaController(context)
-                    mediaController.setAnchorView(this)
-                    setMediaController(mediaController)
-                    setVideoPath(videoUrl)
-                    setOnPreparedListener { player ->
-                        player.isLooping = true
-                        start()
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (hasError) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Error de video",
+                        tint = Color(0xFFF2B8B5),
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "No se pudo cargar el video",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = errorMessage,
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            hasError = false
+                            exoPlayer.prepare()
+                            exoPlayer.play()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Reintentar", fontSize = 11.sp, color = Color.White)
                     }
                 }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+            } else {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = true
+                            layoutParams = android.view.ViewGroup.LayoutParams(
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
     }
 }
 
@@ -1090,21 +1248,68 @@ fun NewsDetailsDialog(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Acknowledge Button
-                    Button(
-                        onClick = { onClose() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(10.dp)
+                    val context = LocalContext.current
+                    val originalUrl = remember(article) { article.getOriginalNewsUrl() }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = "Entendido",
-                            color = textPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
+                        // Action button to open URL
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(originalUrl))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = accentPurple,
+                                contentColor = bgCard
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("open_original_news_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Ver en navegador",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Leer noticia completa en ${article.source}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
+                        // Close dialog button
+                        OutlinedButton(
+                            onClick = { onClose() },
+                            border = BorderStroke(1.dp, Color(0xFF49454F)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = textPrimary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("dismiss_dialog_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = "Volver",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
@@ -1116,6 +1321,7 @@ fun NewsDetailsDialog(
 fun SettingsDialog(
     currentFrequency: Int,
     totalCached: Int,
+    customApiKey: String?,
     bgPrimary: Color,
     bgCard: Color,
     borderColor: Color,
@@ -1123,6 +1329,7 @@ fun SettingsDialog(
     textPrimary: Color,
     textSecondary: Color,
     onFrequencyChange: (Int) -> Unit,
+    onSaveApiKey: (String?) -> Unit,
     onPurge: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1185,6 +1392,77 @@ fun SettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
+
+                // API Key section
+                Text(
+                    text = "GEMINI API KEY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = accentPurple,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                var tempApiKey by remember { mutableStateOf(customApiKey ?: "") }
+                
+                OutlinedTextField(
+                    value = tempApiKey,
+                    onValueChange = { tempApiKey = it },
+                    placeholder = { Text("Ingrese su API Key de Gemini...", color = textSecondary, fontSize = 13.sp) },
+                    modifier = Modifier.fillMaxWidth().testTag("api_key_input"),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
+                        focusedBorderColor = accentPurple,
+                        unfocusedBorderColor = borderColor,
+                        cursorColor = accentPurple,
+                        focusedPlaceholderColor = textSecondary,
+                        unfocusedPlaceholderColor = textSecondary
+                    )
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { 
+                            onSaveApiKey(tempApiKey)
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = accentPurple),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).testTag("save_key_btn")
+                    ) {
+                        Text("Guardar Key", color = Color(0xFF1C1B1F), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    if (customApiKey != null) {
+                        Button(
+                            onClick = { 
+                                tempApiKey = ""
+                                onSaveApiKey(null)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF31111D)),
+                            border = BorderStroke(1.dp, Color(0xFF8C1D18)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("delete_key_btn")
+                        ) {
+                            Text("Borrar", color = Color(0xFFF2B8B5), fontSize = 12.sp)
+                        }
+                    }
+                }
+                
+                Text(
+                    text = "Al guardar se intentará descargar noticias reales globales en tiempo real.",
+                    fontSize = 10.sp,
+                    color = textSecondary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Frecuencia de actualización
                 Row(

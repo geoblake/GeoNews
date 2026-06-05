@@ -58,6 +58,35 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
+// Automatically write environment variables from the build container into .env
+// so the Secrets Gradle Plugin can read and inject them properly.
+val envFile = project.rootProject.file(".env")
+val envExampleFile = project.rootProject.file(".env.example")
+if (envExampleFile.exists()) {
+  val envContent = StringBuilder()
+  envExampleFile.readLines().forEach { line ->
+    if (line.isNotEmpty() && !line.trim().startsWith("#")) {
+      val parts = line.split("=", limit = 2)
+      if (parts.size == 2) {
+        val key = parts[0].trim()
+        val envValue = System.getenv(key) ?: ""
+        if (envValue.isNotEmpty()) {
+          envContent.append("$key=$envValue\n")
+        } else {
+          envContent.append("$line\n")
+        }
+      } else {
+        envContent.append("$line\n")
+      }
+    } else {
+      envContent.append("$line\n")
+    }
+  }
+  if (envContent.isNotEmpty()) {
+    envFile.writeText(envContent.toString())
+  }
+}
+
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
 // to match the convention used in Web projects.
 secrets {
@@ -90,6 +119,8 @@ dependencies {
   // implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.media3.exoplayer)
+  implementation(libs.androidx.media3.ui)
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
